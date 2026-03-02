@@ -288,7 +288,11 @@ absl::StatusOr<std::unique_ptr<Engine>> EngineAdvancedImpl::Create(
     // after the model is loaded.
     ABSL_LOG(INFO) << "New model files have LlmModelType, loading tokenizer "
                       "asynchronously";
+#ifdef __EMSCRIPTEN__
+    tokenizer_future = std::async(std::launch::deferred, create_tokenizer);
+#else
     tokenizer_future = std::async(std::launch::async, create_tokenizer);
+#endif
     RETURN_IF_ERROR(engine_settings.MaybeUpdateAndValidate(
         nullptr, llm_metadata, input_prompt_as_hint,
         model_resources->GetTFLiteModelBackendConstraint(
