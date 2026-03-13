@@ -284,6 +284,28 @@ absl::StatusOr<EngineSettings> CreateEngineSettings(
   return engine_settings;
 }
 
+// Creates an Engine instance from the settings.
+absl::StatusOr<std::unique_ptr<litert::lm::Engine>> CreateEngine(
+    const LiteRtLmSettings& settings, const EngineSettings& engine_settings) {
+  ABSL_LOG(INFO) << "Creating engine";
+  ASSIGN_OR_RETURN(auto engine,
+                   litert::lm::EngineFactory::CreateAny(
+                       std::move(engine_settings), settings.input_prompt));
+  if (settings.vision_backend.has_value()) {
+    ASSIGN_OR_RETURN(auto vision_executor_properties,
+                     engine->GetVisionExecutorProperties());
+    ABSL_LOG(INFO) << "Vision executor properties: "
+                   << vision_executor_properties;
+  }
+  if (settings.audio_backend.has_value()) {
+    ASSIGN_OR_RETURN(auto audio_executor_properties,
+                     engine->GetAudioExecutorProperties());
+    ABSL_LOG(INFO) << "Audio executor properties: "
+                   << audio_executor_properties;
+  }
+  return engine;
+}
+
 // Creates the SessionConfig from the LiteRtLmSettings.
 SessionConfig CreateSessionConfig(const LiteRtLmSettings& settings) {
   // Set the session config.
@@ -440,12 +462,9 @@ absl::StatusOr<std::unique_ptr<Constraint>> CreateRegexConstraint(
                               .constraint_string = constraint_regex});
 }
 
-absl::Status RunSingleTurnConversation(const std::string& input_prompt,
-                                       const LiteRtLmSettings& settings,
-                                       litert::lm::Engine* engine,
-                                       Conversation* conversation) {
-  json content_list = json::array();
-  RETURN_IF_ERROR(BuildContentList(input_prompt, content_list, settings));
+absl::StatusOr<std::stringstream> RunSingleTurnConversation(
+    const json& content_list, const LiteRtLmSettings& settings,
+    litert::lm::Engine* engine, Conversation* conversation) {
   std::stringstream captured_output;
   if (settings.async) {
     RETURN_IF_ERROR(conversation->SendMessageAsync(
@@ -460,7 +479,7 @@ absl::Status RunSingleTurnConversation(const std::string& input_prompt,
                                      captured_output));
   }
   CheckExpectedOutput(captured_output.str(), settings);
-  return absl::OkStatus();
+  return captured_output;
 }
 
 absl::Status RunMultiTurnConversation(const LiteRtLmSettings& settings,
@@ -658,22 +677,7 @@ absl::Status RunLiteRtLm(const LiteRtLmSettings& settings,
 
   ASSIGN_OR_RETURN(EngineSettings engine_settings,
                    CreateEngineSettings(settings));
-  ABSL_LOG(INFO) << "Creating engine";
-  ASSIGN_OR_RETURN(auto engine,
-                   litert::lm::EngineFactory::CreateAny(
-                       std::move(engine_settings), settings.input_prompt));
-  if (settings.vision_backend.has_value()) {
-    ASSIGN_OR_RETURN(auto vision_executor_properties,
-                     engine->GetVisionExecutorProperties());
-    ABSL_LOG(INFO) << "Vision executor properties: "
-                   << vision_executor_properties;
-  }
-  if (settings.audio_backend.has_value()) {
-    ASSIGN_OR_RETURN(auto audio_executor_properties,
-                     engine->GetAudioExecutorProperties());
-    ABSL_LOG(INFO) << "Audio executor properties: "
-                   << audio_executor_properties;
-  }
+  ASSIGN_OR_RETURN(auto engine, CreateEngine(settings, engine_settings));
 
   // Get the session config.
   SessionConfig session_config = CreateSessionConfig(settings);
@@ -725,8 +729,13 @@ absl::Status RunLiteRtLm(const LiteRtLmSettings& settings,
                                                  conversation.get()));
       } else {
         ABSL_LOG(INFO) << "Running single-turn conversation";
-        RETURN_IF_ERROR(RunSingleTurnConversation(
-            settings.input_prompt, settings, engine.get(), conversation.get()));
+        json content_list = json::array();
+        RETURN_IF_ERROR(
+            BuildContentList(settings.input_prompt, content_list, settings));
+        RETURN_IF_ERROR(RunSingleTurnConversation(content_list, settings,
+                                                  engine.get(),
+                                                  conversation.get())
+                            .status());
       }
     }
     LitertLmMetrics metric;
