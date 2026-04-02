@@ -115,11 +115,8 @@ TEST_F(Gemma4DataProcessorTest, ToMessage) {
       processor->ToMessage(Responses(TaskState::kProcessing, {"test response"}),
                            std::monostate{}));
 
-  ASSERT_TRUE(std::holds_alternative<nlohmann::ordered_json>(message));
-  const nlohmann::ordered_json& json_message =
-      std::get<nlohmann::ordered_json>(message);
   EXPECT_EQ(
-      json_message,
+      message,
       json({{"role", "assistant"},
             {"content", {{{"type", "text"}, {"text", "test response"}}}}}));
 }
@@ -150,10 +147,7 @@ TEST_F(Gemma4DataProcessorTest, ToMessageWithToolCalls) {
                                       "<ctrl42>call:tool_name{x:2}<ctrl43>"}),
                            std::monostate{}));
 
-  ASSERT_TRUE(std::holds_alternative<nlohmann::ordered_json>(message));
-  const nlohmann::ordered_json& json_message =
-      std::get<nlohmann::ordered_json>(message);
-  EXPECT_EQ(json_message, nlohmann::ordered_json::parse(R"json({
+  EXPECT_EQ(message, nlohmann::ordered_json::parse(R"json({
     "role": "assistant",
     "content": [
       {
