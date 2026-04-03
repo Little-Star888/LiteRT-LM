@@ -354,6 +354,13 @@ void litert_lm_engine_settings_set_max_num_tokens(
         max_num_tokens);
   }
 }
+void litert_lm_engine_settings_set_parallel_file_section_loading(
+    LiteRtLmEngineSettings* settings, bool parallel_file_section_loading) {
+  if (settings && settings->settings) {
+    settings->settings->SetParallelFileSectionLoading(
+        parallel_file_section_loading);
+  }
+}
 
 void litert_lm_engine_settings_set_cache_dir(LiteRtLmEngineSettings* settings,
                                              const char* cache_dir) {
